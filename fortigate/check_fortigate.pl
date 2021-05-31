@@ -92,6 +92,8 @@
 # - Add SD-WAN Health Check monitoring (tested on Forti900D running FortiOS 6.4.5, Forti60F 6.4.5)
 # Release 1.8.7 (2021-05-31) Sebastian Gruber  (github (at) sebastiangruber.de)
 # - added FortiManager Checks (cpu, mem, disk)
+# Release 1.8.8 (2021-05-31) Sebastian Gruber  (github (at) sebastiangruber.de)
+# - added License Check monitoring
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -120,7 +122,7 @@ use POSIX;
 use Date::Parse;
 
 my $script = "check_fortigate.pl";
-my $script_version = "1.8.7";
+my $script_version = "1.8.8";
 
 # for more information.
 my %status = (     # Enumeration for the output Nagios states
@@ -339,7 +341,7 @@ given ( $curr_serial ) {
          when ("hw" ) { ($return_state, $return_string) = get_hw_state("%"); }
          when ("firmware") { ($return_state, $return_string) = get_firmware_state(); }
          when ("sdwan-hc") { ($return_state, $return_string) = get_sdwan_hc(); }
-         when ("license") { ($return_state, $return_string) = get_license(); }
+         when ("license") { ($return_state, $return_string) = get_license_contract(); }
          default { ($return_state, $return_string) = get_cluster_state(); }
       }
    }
@@ -930,10 +932,10 @@ sub get_license_contract {
       my @license_expiry_table;
       $return_state = "OK";
       $return_string = "All licenses are in appropriate state";
-
       $k = 1;
       $license_actualdate = time();
-      $license_warning = $warning_day * 86400;
+      $license_warning = $warn * 86400;
+      $license_critcal = $crit * 86400;
       while ($k <= $sdwan_hc_cnt) {
          my $license_contract_descpriction = $license_contract_descpriction_table{$oid_license_contract_description_table.'.'.$k};
          my $license_contract_expiry = $license_contract_expiry_table{$oid_license_contract_expiry_table.'.'.$k};
@@ -1205,10 +1207,10 @@ STRING - Primary serial number.
 BOOL - Get values of slave
 
 =item B<-w|--warning>
-INTEGER - Warning threshold, applies to cpu, mem, disk, net, session.
+INTEGER - Warning threshold, applies to cpu, mem, disk, net, session, license.
 
 =item B<-c|--critical>
-INTEGER - Critical threshold, applies to cpu, mem, disk, net, session.
+INTEGER - Critical threshold, applies to cpu, mem, disk, net, session, license.
 
 =item B<-e|--expected>
 INTEGER - Critical threshold, applies to ha.
