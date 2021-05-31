@@ -922,46 +922,50 @@ sub get_sdwan_hc {
    return ($return_state, $return_string);
 } # end sdwan_hc
 
-# Get License contract
+# Get License contract Information and checks if its expiring soon
 sub get_license_contract {
    my $k;
    my $lic_contract_cnt = get_snmp_value($session, $oid_license_contract_count );
    if ( $lic_contract_cnt > 0 ) {
       my %license_contract_descpriction_table = %{get_snmp_table($session, $oid_license_contract_description_table)};
       my %license_contract_expiry_table = %{get_snmp_table($session, $oid_license_contract_expiry_table)};
-      my @license_expiry_table;
+      my @license_expiry_warn_table;
+      my @license_expiry_crit_table;
       $return_state = "OK";
       $return_string = "All licenses are in appropriate state";
       $k = 1;
-      $license_actualdate = time();
-      $license_warning = $warn * 86400;
-      $license_critcal = $crit * 86400;
-      while ($k <= $sdwan_hc_cnt) {
+      my $license_actualdate = time();
+      my $license_warning = $warn * 86400;
+      my $license_critcal = $crit * 86400;
+      while ($k <= $lic_contract_cnt) {
          my $license_contract_descpriction = $license_contract_descpriction_table{$oid_license_contract_description_table.'.'.$k};
          my $license_contract_expiry = $license_contract_expiry_table{$oid_license_contract_expiry_table.'.'.$k};
-         $license_contract_expiry = str2time($string); #Parse SNMP String to output
-         $license_remaining = $license_contract_expiry - $license_actualdate;
-         $license_remaining_days = $license_remaining / 86400;
+         #$license_contract_expiry = str2time($license_contract_expiry); #Parse SNMP String to output
+         my $license_remaining = str2time($license_contract_expiry) - $license_actualdate;
+         my $license_remaining_days = $license_remaining / 86400;
         if (($license_remaining <= $license_warning) && ($license_remaining <= $license_critcal) ) {
-                $return_string = 'License Warning '.join(';', @license_expiry_table);
-                $return_state = 'WARNING';
+
+                push (@license_expiry_warn_table, ($license_contract_descpriction.'/'.$license_contract_expiry));
               }
         if ($license_remaining <= $license_critcal) {
-                $return_string = 'License expiration soon '.join(';', @license_expiry_table);
-                $return_state = 'CRITICAL';
+                push (@license_expiry_crit_table, ($license_contract_descpriction.'/'.$license_contract_expiry));
               }
-         if ($license_contract_expiry eq '1') {
-            push (@license_expiry_table, ($license_contract_descpriction.'/'.$license_contract_expiry));
-         }
          $k++;
+      }
+      if ($#license_expiry_warn_table > 0) {
+          $return_string = 'License expiration '.join(';', @license_expiry_warn_table);
+          $return_state = 'WARNING';
+      }
+      if ($#license_expiry_crit_table > 0) {
+          $return_string = 'License expiration '.join(';', @license_expiry_crit_table);
+          $return_state = 'CRITICAL';
       }
    } else {
       $return_string = "UNKNOWN: device has no license checks available";
       $return_state = "UNKNOWN";
    }
-
    return ($return_state, $return_string);
-} # end license
+} # end license_contract
 
 sub close_snmp_session{
   my $session = $_[0];
