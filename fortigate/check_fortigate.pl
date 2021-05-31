@@ -117,6 +117,7 @@ use Getopt::Long qw(:config no_ignore_case bundling);
 use Pod::Usage;
 use Socket;
 use POSIX;
+use Date::Parse;
 
 my $script = "check_fortigate.pl";
 my $script_version = "1.8.7";
@@ -177,6 +178,7 @@ my $oid_disk_cap         = ".1.3.6.1.4.1.12356.101.4.1.7.0";       # Location of
 my $oid_ha               = ".1.3.6.1.4.1.12356.101.13.1.1.0";      # Location of HA Mode (int - standalone(1),activeActive(2),activePassive(3) )
 my $oid_ha_sync_prefix   = ".1.3.6.1.4.1.12356.101.13.2.1.1.15";   # Location of HA Sync Checksum prefix (string - if match, nodes are synced )
 my $oid_uptime           = ".1.3.6.1.4.1.12356.101.4.1.20.0";      # Location of Uptime value (int - hundredths of a second)
+
 
 ## Legacy OIDs ##
 my $oid_legacy_serial    = ".1.3.6.1.4.1.12356.1.2.0";             # Location of Fortinet serial number (String)
@@ -248,6 +250,17 @@ my $oid_sdwan_healthcheck_count       = ".1.3.6.1.4.1.12356.101.4.9.1.0";    # S
 my $oid_sdwan_healthcheck_state_table = ".1.3.6.1.4.1.12356.101.4.9.2.1.4";  # SDWAN HealthCheck state table
 my $oid_sdwan_healthcheck_name_table  = ".1.3.6.1.4.1.12356.101.4.9.2.1.2";  # SDWAN HealthCheck name table
 my $oid_sdwan_healthcheck_iname_table = ".1.3.6.1.4.1.12356.101.4.9.2.1.14"; # SDWAN HealthCheck interface name table
+
+# License FortiGate
+# license contract
+my $oid_license_contract_count                = ".1.3.6.1.4.1.12356.101.4.6.3.1.1.0";    # License Contract Count
+my $oid_license_contract_description_table    = ".1.3.6.1.4.1.12356.101.4.6.3.1.2.1.1";  # License Contract description
+my $oid_license_contract_expiry_table         = "1.3.6.1.4.1.12356.101.4.6.3.1.2.1.2";   # License Contract expiry time
+
+# license Version
+my $oid_license_version_count                = ".1.3.6.1.4.1.12356.101.4.6.3.2.1.0";    # License Version Count
+my $oid_license_version_description_table    = ".1.3.6.1.4.1.12356.101.4.6.3.2.2.1.1";  # License Version description
+my $oid_license_version_expiry_table         = ".1.3.6.1.4.1.12356.101.4.6.3.2.2.1.2";  # License Version expiry time
 
 ## Stuff ##
 my $return_state;                                     # return state
@@ -326,6 +339,7 @@ given ( $curr_serial ) {
          when ("hw" ) { ($return_state, $return_string) = get_hw_state("%"); }
          when ("firmware") { ($return_state, $return_string) = get_firmware_state(); }
          when ("sdwan-hc") { ($return_state, $return_string) = get_sdwan_hc(); }
+         when ("license") { ($return_state, $return_string) = get_license(); }
          default { ($return_state, $return_string) = get_cluster_state(); }
       }
    }
@@ -906,6 +920,47 @@ sub get_sdwan_hc {
    return ($return_state, $return_string);
 } # end sdwan_hc
 
+# Get License contract
+sub get_license_contract {
+   my $k;
+   my $lic_contract_cnt = get_snmp_value($session, $oid_license_contract_count );
+   if ( $lic_contract_cnt > 0 ) {
+      my %license_contract_descpriction_table = %{get_snmp_table($session, $oid_license_contract_description_table)};
+      my %license_contract_expiry_table = %{get_snmp_table($session, $oid_license_contract_expiry_table)};
+      my @license_expiry_table;
+      $return_state = "OK";
+      $return_string = "All licenses are in appropriate state";
+
+      $k = 1;
+      $license_actualdate = time();
+      $license_warning = $warning_day * 86400;
+      while ($k <= $sdwan_hc_cnt) {
+         my $license_contract_descpriction = $license_contract_descpriction_table{$oid_license_contract_description_table.'.'.$k};
+         my $license_contract_expiry = $license_contract_expiry_table{$oid_license_contract_expiry_table.'.'.$k};
+         $license_contract_expiry = str2time($string); #Parse SNMP String to output
+         $license_remaining = $license_contract_expiry - $license_actualdate;
+         $license_remaining_days = $license_remaining / 86400;
+        if (($license_remaining <= $license_warning) && ($license_remaining <= $license_critcal) ) {
+                $return_string = 'License Warning '.join(';', @license_expiry_table);
+                $return_state = 'WARNING';
+              }
+        if ($license_remaining <= $license_critcal) {
+                $return_string = 'License expiration soon '.join(';', @license_expiry_table);
+                $return_state = 'CRITICAL';
+              }
+         if ($license_contract_expiry eq '1') {
+            push (@license_expiry_table, ($license_contract_descpriction.'/'.$license_contract_expiry));
+         }
+         $k++;
+      }
+   } else {
+      $return_string = "UNKNOWN: device has no license checks available";
+      $return_state = "UNKNOWN";
+   }
+
+   return ($return_state, $return_string);
+} # end license
+
 sub close_snmp_session{
   my $session = $_[0];
 
@@ -1141,7 +1196,7 @@ as an alternative to --authpassword/--privpassword/--community
 =over
 
 =item B<-T|--type>
-STRING - CPU, MEM, Ses, VPN, net, disk, ha, hasync, uptime, Cluster, wtp, hw, fazcpu, fazmem, fazdisk, sdwan-hc
+STRING - CPU, MEM, Ses, VPN, net, disk, ha, hasync, uptime, Cluster, wtp, hw, fazcpu, fazmem, fazdisk, sdwan-hc, license
 
 =item B<-S|--serial>
 STRING - Primary serial number.
