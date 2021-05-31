@@ -944,7 +944,6 @@ sub get_license_contract {
          my $license_remaining = str2time($license_contract_expiry) - $license_actualdate;
          my $license_remaining_days = $license_remaining / 86400;
         if (($license_remaining <= $license_warning) && ($license_remaining <= $license_critcal) ) {
-
                 push (@license_expiry_warn_table, ($license_contract_descpriction.'/'.$license_contract_expiry));
               }
         if ($license_remaining <= $license_critcal) {
@@ -953,11 +952,11 @@ sub get_license_contract {
          $k++;
       }
       if ($#license_expiry_warn_table > 0) {
-          $return_string = 'License expiration '.join(';', @license_expiry_warn_table);
+          $return_string = 'WARNING: License expiration '.join(';', @license_expiry_warn_table);
           $return_state = 'WARNING';
       }
       if ($#license_expiry_crit_table > 0) {
-          $return_string = 'License expiration '.join(';', @license_expiry_crit_table);
+          $return_string = 'CRITICAL: License expiration '.join(';', @license_expiry_crit_table);
           $return_state = 'CRITICAL';
       }
    } else {
