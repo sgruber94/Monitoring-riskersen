@@ -92,6 +92,7 @@
 # - Add SD-WAN Health Check monitoring (tested on Forti900D running FortiOS 6.4.5, Forti60F 6.4.5)
 # Release 1.8.7 (2021-05-31) Sebastian Gruber  (github (at) sebastiangruber.de)
 # - added FortiManager Checks (cpu, mem, disk)
+# - added Link-Monitor Health Check (alive,dead), tested on Forti900D running FortiOS 6.4.5, Forti60F 6.4.5
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -939,7 +940,6 @@ sub get_linkmonitor_hc {
          $return_string = 'Link Monitor HC Failed: '.join(';', @linkmonitor_hc_failed);
          $return_state = 'CRITICAL';
       }
-
    } else {
       $return_string = "UNKNOWN: device has no Link Monitor healt checks available";
       $return_state = "UNKNOWN";
