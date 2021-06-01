@@ -944,18 +944,16 @@ sub get_fmg_device_state {
          }
          $k++;
       }
-
-      if ($#fmg_device_config_state > 0) {
+      if (@fmg_device_config) {
          $return_state = 'WARNING';
-         $return_string_errors .= sprintf("Config Out-Of-Sync[%s]", join(", ", @fmg_device_config));
+         $return_string_errors .= sprintf(" Config Out-Of-Sync[%s]", join(", ", @fmg_device_config));
       }
-
-      if ($#fmg_device_down > 0) {
-         $return_string_errors .= sprintf("DOWN[%s]", join(", ", @fmg_device_down));
+      if (@fmg_device_down ) {
+         $return_string_errors .= sprintf(" DOWN[%s]", join(", ", @fmg_device_down));
          $return_state = 'CRITICAL';
       }
       # Write an output string...
-      $return_string = $return_state . ": " . $curr_device . " (Primary: " . $curr_serial .")";
+      $return_string = $return_state . ": " . $curr_device . "  ";
       $return_string .=  $return_string_errors;
 
    } else {
