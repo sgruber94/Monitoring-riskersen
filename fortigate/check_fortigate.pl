@@ -249,6 +249,11 @@ my $oid_sdwan_healthcheck_state_table = ".1.3.6.1.4.1.12356.101.4.9.2.1.4";  # S
 my $oid_sdwan_healthcheck_name_table  = ".1.3.6.1.4.1.12356.101.4.9.2.1.2";  # SDWAN HealthCheck name table
 my $oid_sdwan_healthcheck_iname_table = ".1.3.6.1.4.1.12356.101.4.9.2.1.14"; # SDWAN HealthCheck interface name table
 
+# Link-Monitor
+my $oid_linkmonitor_healthcheck_count = ".1.3.6.1.4.1.12356.101.4.8.1.0";    # LinkMonitor HealthCheck count
+my $oid_linkmonitor_healthcheck_state_table = ".1.3.6.1.4.1.12356.101.4.8.2.1.3";  # LinkMonitor HealthCheck state table
+my $oid_linkmonitor_healthcheck_name_table  = ".1.3.6.1.4.1.12356.101.4.8.2.1.2";  # LinkMonitor HealthCheck name table
+
 ## Stuff ##
 my $return_state;                                     # return state
 my $return_string;                                    # return string
@@ -326,6 +331,7 @@ given ( $curr_serial ) {
          when ("hw" ) { ($return_state, $return_string) = get_hw_state("%"); }
          when ("firmware") { ($return_state, $return_string) = get_firmware_state(); }
          when ("sdwan-hc") { ($return_state, $return_string) = get_sdwan_hc(); }
+         when ("linkmonitor-hc") { ($return_state, $return_string) = get_linkmonitor_hc(); }
          default { ($return_state, $return_string) = get_cluster_state(); }
       }
    }
@@ -906,6 +912,42 @@ sub get_sdwan_hc {
    return ($return_state, $return_string);
 } # end sdwan_hc
 
+# Get Link Monitor Health Check list and check its status (Alive/Dead)
+sub get_linkmonitor_hc {
+   my $k;
+   my $linkmonitor_hc_cnt = get_snmp_value($session, $oid_linkmonitor_healthcheck_count);
+   if ( $linkmonitor_hc_cnt > 0 ) {
+      my %linkmonitor_hc_name_table = %{get_snmp_table($session, $oid_linkmonitor_healthcheck_name_table)};
+      my %linkmonitor_hc_state_table = %{get_snmp_table($session, $oid_linkmonitor_healthcheck_state_table)};
+
+      my @linkmonitor_hc_failed;
+
+      $return_state = "OK";
+      $return_string = "All Link Monitor health checks are in appropriate state";
+
+      $k = 1;
+      while ($k <= $linkmonitor_hc_cnt) {
+         my $linkmonitor_hc_name = $linkmonitor_hc_name_table{$oid_linkmonitor_healthcheck_name_table.'.'.$k};
+         my $linkmonitor_hc_state = $linkmonitor_hc_state_table{$oid_linkmonitor_healthcheck_state_table.'.'.$k};
+         if ($linkmonitor_hc_state eq '1') {
+            push (@linkmonitor_hc_failed, ($linkmonitor_hc_name));
+         }
+         $k++;
+      }
+
+      if (@linkmonitor_hc_failed) {
+         $return_string = 'Link Monitor HC Failed: '.join(';', @linkmonitor_hc_failed);
+         $return_state = 'CRITICAL';
+      }
+
+   } else {
+      $return_string = "UNKNOWN: device has no Link Monitor healt checks available";
+      $return_state = "UNKNOWN";
+   }
+
+   return ($return_state, $return_string);
+} # end get_linkmonitor_hc
+
 sub close_snmp_session{
   my $session = $_[0];
 
@@ -1141,7 +1183,7 @@ as an alternative to --authpassword/--privpassword/--community
 =over
 
 =item B<-T|--type>
-STRING - CPU, MEM, Ses, VPN, net, disk, ha, hasync, uptime, Cluster, wtp, hw, fazcpu, fazmem, fazdisk, sdwan-hc
+STRING - CPU, MEM, Ses, VPN, net, disk, ha, hasync, uptime, Cluster, wtp, hw, fazcpu, fazmem, fazdisk, sdwan-hc, linkmonitor-hc
 
 =item B<-S|--serial>
 STRING - Primary serial number.
