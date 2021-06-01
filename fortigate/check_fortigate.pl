@@ -262,7 +262,10 @@ my $oid_license_contract_expiry_table         = "1.3.6.1.4.1.12356.101.4.6.3.1.2
 # license Version
 my $oid_license_version_count                = ".1.3.6.1.4.1.12356.101.4.6.3.2.1.0";    # License Version Count
 my $oid_license_version_description_table    = ".1.3.6.1.4.1.12356.101.4.6.3.2.2.1.1";  # License Version description
-my $oid_license_version_expiry_table         = ".1.3.6.1.4.1.12356.101.4.6.3.2.2.1.2";  # License Version expiry time
+my $oid_license_version_upd_time_table       = ".1.3.6.1.4.1.12356.101.4.6.3.2.2.1.4";  # License Version update time
+my $oid_license_version_upd_method_table     = ".1.3.6.1.4.1.12356.101.4.6.3.2.2.1.5";  # License Version update method
+my $oid_license_version_try_time_table       = ".1.3.6.1.4.1.12356.101.4.6.3.2.2.1.6";  # License Version try time
+my $oid_license_version_try_result_table     = ".1.3.6.1.4.1.12356.101.4.6.3.2.2.1.7";  # License Version try result
 
 ## Stuff ##
 my $return_state;                                     # return state
@@ -342,6 +345,7 @@ given ( $curr_serial ) {
          when ("firmware") { ($return_state, $return_string) = get_firmware_state(); }
          when ("sdwan-hc") { ($return_state, $return_string) = get_sdwan_hc(); }
          when ("license") { ($return_state, $return_string) = get_license_contract(); }
+         when ("license-version") { ($return_state, $return_string) = get_license_version(); }
          default { ($return_state, $return_string) = get_cluster_state(); }
       }
    }
@@ -927,9 +931,6 @@ sub get_license_contract {
    my $k;
    my $lic_contract_cnt = get_snmp_value($session, $oid_license_contract_count );
    if ( $lic_contract_cnt > 0 ) {
-      use constant {
-      DAY => 86400,
-      };
       my %license_contract_descpriction_table = %{get_snmp_table($session, $oid_license_contract_description_table)};
       my %license_contract_expiry_table = %{get_snmp_table($session, $oid_license_contract_expiry_table)};
       my @license_expiry_warn_table;
@@ -938,15 +939,14 @@ sub get_license_contract {
       #$return_string = "All licenses are in appropriate state";
       $k = 1;
       my $license_actualdate = time();
-      my $license_warning = $warn * DAY;
-      my $license_critcal = $crit * DAY;
+      my $license_warning = $warn * 86400;
+      my $license_critcal = $crit * 86400;
       my $return_string_errors = "";
       while ($k <= $lic_contract_cnt) {
          my $license_contract_descpriction = $license_contract_descpriction_table{$oid_license_contract_description_table.'.'.$k};
          my $license_contract_expiry = $license_contract_expiry_table{$oid_license_contract_expiry_table.'.'.$k};
-         #$license_contract_expiry = str2time($license_contract_expiry); #Parse SNMP String to output
          my $license_remaining = str2time($license_contract_expiry) - $license_actualdate;
-         my $license_remaining_days = $license_remaining / DAY;
+         my $license_remaining_days = $license_remaining / 86400;
         if (($license_remaining <= $license_warning) && ($license_remaining <= $license_critcal) ) {
                 push (@license_expiry_warn_table, ($license_contract_descpriction.'/'.$license_contract_expiry));
               }
@@ -959,7 +959,7 @@ sub get_license_contract {
           $return_string_errors .= sprintf(" WARNING[%s]", join(", ", @license_expiry_warn_table));
           $return_state = 'WARNING';
       }
-      if (@license_expiry_crit_table{
+      if (@license_expiry_crit_table){
           $return_string_errors .= sprintf(" CRITICAL[%s]", join(", ", @license_expiry_crit_table));
           $return_state = 'CRITICAL';
       }
@@ -971,6 +971,58 @@ sub get_license_contract {
    }
    return ($return_state, $return_string);
 } # end license_contract
+
+sub get_license_version {
+   my $k;
+   my $lic_version_cnt = get_snmp_value($session, $oid_license_version_count );
+   if ( $lic_version_cnt > 0 ) {
+      my %license_version_descpriction_table = %{get_snmp_table($session, $oid_license_version_description_table)};
+      #last real update
+      my %license_version_upd_time_table = %{get_snmp_table($session, $oid_license_version_upd_time_table)};
+      my %license_version_upd_method_table = %{get_snmp_table($session, $oid_license_version_upd_method_table)};
+      #last try
+      my %license_version_try_time_table = %{get_snmp_table($session, $oid_license_version_try_time_table)};
+      my %license_version_try_result_table = %{get_snmp_table($session, $oid_license_version_try_result_table)};
+      #update method: "scheduled" , manual @tryresultOK = ("Updates Installed", "No Updates");
+      my @tryresultfailure = ("Connectivity failure", "No Updates", "Unauthorized");
+      my @license_failed_table;
+      my @license_version_table;
+      $k = 1;
+      my ($lic_version_scheduled_cnt, $lic_version_manual_cnt) = 0;
+      my $return_string_errors = "";
+      while ($k <= $lic_version_cnt) {
+        my $license_version_descpriction = $license_version_descpriction_table{$oid_license_version_description_table.'.'.$k};
+        my $license_version_upd_time = $license_version_upd_time_table{$oid_license_version_upd_time_table.'.'.$k};
+        my $license_version_upd_method = $license_version_upd_method_table{$oid_license_version_upd_method_table.'.'.$k};
+        my $license_version_try_time = $license_version_try_time_table{$oid_license_version_try_time_table.'.'.$k};
+        my $license_version_try_result = $license_version_try_result_table{$oid_license_version_try_result_table.'.'.$k};
+        if($license_version_upd_method eq "scheduled")
+        {
+          # only check scheduled
+          if ( grep { $_ eq $license_version_upd_method } @license_failed_table ){
+            push (@license_failed_table, ($license_version_descpriction.'/ last try time: '.$license_version_try_time.' last error: '.$license_version_try_result));
+          }
+          $lic_version_scheduled_cnt++;
+        }elsif($license_version_upd_method eq "manual"){
+          $lic_version_manual_cnt++;
+        }
+         $k++;
+      }
+      if (@license_failed_table) {
+          $return_string_errors .= sprintf(" $lic_version_scheduled_cnt / $lic_version_cnt scheduled updates with error [%s]", join(", ", @license_failed_table));
+          $return_state = 'CRITICAL';
+      }else{
+          $return_state = "OK";
+          $return_string_errors .= sprintf("All scheduled licenses are in appropriate state.");
+      }
+      $return_string = $return_state . ": " . $curr_device . " scheduled:" . $lic_version_scheduled_cnt . "  manual:" . $lic_version_manual_cnt;
+      $return_string .=  $return_string_errors;
+   } else {
+      $return_string = "UNKNOWN: device has no license checks available";
+      $return_state = "UNKNOWN";
+   }
+   return ($return_state, $return_string);
+} # end license_version
 
 sub close_snmp_session{
   my $session = $_[0];
@@ -1207,7 +1259,7 @@ as an alternative to --authpassword/--privpassword/--community
 =over
 
 =item B<-T|--type>
-STRING - CPU, MEM, Ses, VPN, net, disk, ha, hasync, uptime, Cluster, wtp, hw, fazcpu, fazmem, fazdisk, sdwan-hc, license
+STRING - CPU, MEM, Ses, VPN, net, disk, ha, hasync, uptime, Cluster, wtp, hw, fazcpu, fazmem, fazdisk, sdwan-hc, license, license-version
 
 =item B<-S|--serial>
 STRING - Primary serial number.
