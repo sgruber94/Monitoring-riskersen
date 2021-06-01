@@ -92,8 +92,8 @@
 # - Add SD-WAN Health Check monitoring (tested on Forti900D running FortiOS 6.4.5, Forti60F 6.4.5)
 # Release 1.8.7 (2021-05-31) Sebastian Gruber  (github (at) sebastiangruber.de)
 # - added FortiManager Checks (cpu, mem, disk)
-# Release 1.8.8 (2021-05-31) Sebastian Gruber  (github (at) sebastiangruber.de)
-# - added License Check monitoring
+# Release 1.8.8 (2021-06-01) Sebastian Gruber  (github (at) sebastiangruber.de)
+# - added License Check monitoring for FortiGate
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
