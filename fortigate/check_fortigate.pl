@@ -93,7 +93,8 @@
 # Release 1.8.7 (2021-05-31) Sebastian Gruber  (github (at) sebastiangruber.de)
 # - added FortiManager Checks (cpu, mem, disk)
 # Release 1.8.8 (2021-06-01) Sebastian Gruber  (github (at) sebastiangruber.de)
-# - added License Check monitoring for FortiGate
+# - added License expiration Check monitoring for FortiGate with critical & warning
+# - added License Version Check for scheduled Updates on FortiGate
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
