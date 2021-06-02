@@ -445,17 +445,20 @@ sub get_ha_sync {
 
 sub get_uptime {
   my $value = (get_snmp_value($session, $oid_uptime)/100);
-
   my ($days_val, $rem_d_value) = (int($value / 86400), $value / 86400);
-
   my $hours_val = int(($rem_d_value-$days_val) * 24);
-
   my $minutes_val = int (((($rem_d_value-$days_val) * 24)-int(($rem_d_value-$days_val) * 24)) * 60);
 
-  $return_state = "OK";
-  $return_string = $days_val . " day(s) " . $hours_val . " hour(s) " . $minutes_val . " minute(s)";
+ if ( $warn != 80 && $value <= $warn ) {
+    $valuemin = $value / 60;
+    $return_state = "WARNING";
+    $return_string = "uptime is lower than " . $valuemin . " minutes. ";
+  }else {
+    $return_state = "OK";
+    $return_string = $days_val . " day(s) " . $hours_val . " hour(s) " . $minutes_val . " minute(s)";
+  }
 
-  $return_string = $return_state . ": " . $return_string;
+$return_string = $return_state . ": " . $return_string;
   return ($return_state, $return_string);
 }
 
@@ -1150,7 +1153,7 @@ STRING - Primary serial number.
 BOOL - Get values of slave
 
 =item B<-w|--warning>
-INTEGER - Warning threshold, applies to cpu, mem, disk, net, session.
+INTEGER - Warning threshold, applies to cpu, mem, disk, net, session, uptime.
 
 =item B<-c|--critical>
 INTEGER - Critical threshold, applies to cpu, mem, disk, net, session.
