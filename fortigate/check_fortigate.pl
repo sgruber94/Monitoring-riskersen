@@ -923,10 +923,10 @@ sub get_conserve_mode {
   my $mem_enter_thrsh = get_snmp_value($session, $oid_enter_trsh);
   my $mem_leave_thrsh = get_snmp_value($session, $oid_leave_trsh);
 
-  if ( $lowmem_capacity >= $mem_enter_thrsh ) {
+  if ( $lowmem_capacity <= $mem_enter_thrsh ) {
     $return_state = "CRITICAL";
     $return_string = $label . " conserve mode entered !" ;
-  } elsif ( $lowmem_capacity >= $mem_leave_thrsh ) {
+  } elsif ( $lowmem_capacity <= $mem_leave_thrsh ) {
     $return_state = "WARNING";
     $return_string = $label . " conserve mode may entered ";
   } else {
@@ -934,8 +934,8 @@ sub get_conserve_mode {
     $return_string = "No " . $label . " conserve mode active";
   }
 
-  $perf = "|'" . lc($label) . "'=" . $lowmem_capacity . ";" . $mem_enter_thrsh . ";" . $mem_leave_thrsh;
-  $return_string = $return_state . ": " . $return_string . $curr_device . " (Current device: " . $curr_serial .") " . $perf;
+  $perf = "|'" . "low_mem_cap" . "'=" . $lowmem_capacity . ";" . $mem_enter_thrsh . ";" . $mem_leave_thrsh;
+  $return_string = $return_state . ": " . $return_string . "  " . $curr_device . " (Current device: " . $curr_serial .") " . $perf;
 
   return ($return_state, $return_string);
 } # end get_conserve_mode
