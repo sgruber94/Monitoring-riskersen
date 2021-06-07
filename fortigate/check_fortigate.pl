@@ -15,7 +15,7 @@
 # Tested on: FortiGate 60E (6.4.5)
 #
 # Author: Sebastian Gruber (github (at) sebastiangruber.de)
-# Date: 2021-02-10
+# Date: 2021-06-07
 #
 # Changelog:
 # Release 1.0 (2013)
@@ -90,11 +90,12 @@
 # - Change regex for IPSec VPN monitoring (tested on Forti800D running FortiOS 6.2.3)
 # Release 1.8.6 (2021-04-06) Dariusz Zielinski-Kolasinski
 # - Add SD-WAN Health Check monitoring (tested on Forti900D running FortiOS 6.4.5, Forti60F 6.4.5)
-# Release 1.8.7 (2021-05-31) Sebastian Gruber  (github (at) sebastiangruber.de)
-# - added FortiManager Checks (cpu, mem, disk)
-# Release 1.8.8 (2021-06-01) Sebastian Gruber  (github (at) sebastiangruber.de)
-# - added License expiration Check monitoring for FortiGate with critical & warning
-# - added License Version Check for scheduled Updates on FortiGate
+# Release 1.8.7 (2021-06-07) Sebastian Gruber  (github (at) sebastiangruber.de)
+# - added FortiManager Health Checks (cpu, mem, disk)
+# - added FortiManager Health Checks for connected devices health (up/down) and config-sync State (fmgdevice)
+# - added Fortigate Uptime warn (behaviour if warn is set)
+# - added Fortigate License expiration Check monitoring for FortiGate with critical & warning (license)
+# - added Fortigate License Version Check for scheduled Updates on FortiGate (license-version)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -206,11 +207,17 @@ my $oid_fe_load          = ".1.3.6.1.4.1.12356.105.1.30.0";        # Location of
 my $oid_fe_ses           = ".1.3.6.1.4.1.12356.105.1.10.0";        # Location of cluster member Sessions for FortiMail (int)
 
 ## FortiManager OIDS ###
-my $oid_fmg_cpu_used     = ".1.3.6.1.4.1.12356.103.2.1.1.0";       # Location of CPU for FortiManager (%)
-my $oid_fmg_mem_used     = ".1.3.6.1.4.1.12356.103.2.1.2.0";       # Location of Memory used for FortiManager (kb)
-my $oid_fmg_mem_avail    = ".1.3.6.1.4.1.12356.103.2.1.3.0";       # Location of Memory available for FortiManager (kb)
-my $oid_fmg_disk_used    = ".1.3.6.1.4.1.12356.103.2.1.4.0";       # Location of Disk used for FortiManager (Mb)
-my $oid_fmg_disk_avail   = ".1.3.6.1.4.1.12356.103.2.1.5.0";       # Location of Disk available for FortiManager (Mb)
+my $oid_fmg_cpu_used     = ".1.3.6.1.4.1.12356.103.2.1.1.0";          # Location of CPU for FortiManager (%)
+my $oid_fmg_mem_used     = ".1.3.6.1.4.1.12356.103.2.1.2.0";          # Location of Memory used for FortiManager (kb)
+my $oid_fmg_mem_avail    = ".1.3.6.1.4.1.12356.103.2.1.3.0";          # Location of Memory available for FortiManager (kb)
+my $oid_fmg_disk_used    = ".1.3.6.1.4.1.12356.103.2.1.4.0";          # Location of Disk used for FortiManager (Mb)
+my $oid_fmg_disk_avail   = ".1.3.6.1.4.1.12356.103.2.1.5.0";          # Location of Disk available for FortiManager (Mb)
+my $oid_fmg_device_count   = ".1.3.6.1.4.1.12356.103.6.1.1.0";        # Count of Devices for FortiManager
+my $oid_fmg_device_table   = ".1.3.6.1.4.1.12356.103.6.2";            # Location of Device Table for FortiManager
+my $oid_fmg_device_name_table   = ".1.3.6.1.4.1.12356.103.6.2.1.2";   # Location of Device Table Name for FortiManager
+my $oid_fmg_device_adom_table   = ".1.3.6.1.4.1.12356.103.6.2.1.5";   # Location of Device Table admom for FortiManager
+my $oid_fmg_device_con_state_table   = ".1.3.6.1.4.1.12356.103.6.2.1.12";   # Location of Device Table connection state for FortiManager
+my $oid_fmg_device_config_state_table   = ".1.3.6.1.4.1.12356.103.6.2.1.14";   # Location of Device Table config state for FortiManager
 
 ## FortiADC OIDs ##
 my $oid_fad_mem           = ".1.3.6.1.4.1.12356.112.1.5.0";        # Location of Memory for FortiADC (%)
@@ -302,6 +309,7 @@ given ( $curr_serial ) {
          when ("cpu") { ($return_state, $return_string) = get_health_value($oid_fmg_cpu_used, "CPU", "%"); }
          when ("mem") { ($return_state, $return_string) = get_fmg_health_value($oid_fmg_mem_used, $oid_fmg_mem_avail, "Memory", "%"); }
          when ("disk") { ($return_state, $return_string) = get_fmg_health_value($oid_fmg_disk_used, $oid_fmg_disk_avail, "Disk", "%"); }
+         when ("fmgdevice") { ($return_state, $return_string) = get_fmg_device_state(); }
          default { ($return_state, $return_string) = ('UNKNOWN',"UNKNOWN: This device supports only selected type -T cpu|mem|disk, $curr_device is a FORTIANALYZER (S/N: $curr_serial)"); }
       }
    } when ( /^FE/ ) { # FE = FORTIMAIL
@@ -466,17 +474,20 @@ sub get_ha_sync {
 
 sub get_uptime {
   my $value = (get_snmp_value($session, $oid_uptime)/100);
-
   my ($days_val, $rem_d_value) = (int($value / 86400), $value / 86400);
-
   my $hours_val = int(($rem_d_value-$days_val) * 24);
-
   my $minutes_val = int (((($rem_d_value-$days_val) * 24)-int(($rem_d_value-$days_val) * 24)) * 60);
 
-  $return_state = "OK";
-  $return_string = $days_val . " day(s) " . $hours_val . " hour(s) " . $minutes_val . " minute(s)";
+ if ( $warn != 80 && $value <= $warn ) {
+    $valuemin = $value / 60;
+    $return_state = "WARNING";
+    $return_string = "uptime is lower than " . $valuemin . " minutes. ";
+  }else {
+    $return_state = "OK";
+    $return_string = $days_val . " day(s) " . $hours_val . " hour(s) " . $minutes_val . " minute(s)";
+  }
 
-  $return_string = $return_state . ": " . $return_string;
+$return_string = $return_state . ": " . $return_string;
   return ($return_state, $return_string);
 }
 
@@ -1024,6 +1035,55 @@ sub get_license_version {
    }
    return ($return_state, $return_string);
 } # end license_version
+# Get FortiManger Device State list and check its connect state (up/down) (critical) and all without sync (warning)
+sub get_fmg_device_state {
+   my $k;
+   my $fmg_device_cnt = get_snmp_value($session, $oid_fmg_device_count);
+   if ( $fmg_device_cnt > 0 ) {
+      my %fmg_device_name_table = %{get_snmp_table($session, $oid_fmg_device_name_table)};
+      my %fmg_device_adom_table = %{get_snmp_table($session, $oid_fmg_device_adom_table)};
+      my %fmg_device_con_state_table = %{get_snmp_table($session, $oid_fmg_device_con_state_table)};
+      my %fmg_device_config_state_table = %{get_snmp_table($session, $oid_fmg_device_config_state_table)};
+      my $return_string_errors = "";
+      my @fmg_device_down; # List all devices that are down
+      my @fmg_device_config; # List all devices that are out of sync
+
+      $return_state = "OK";
+      $return_string = "All Devices are in appropriate state";
+
+      $k = 1;
+      while ($k <= $fmg_device_cnt) {
+         my $fmg_device_name = $fmg_device_name_table{$oid_fmg_device_name_table.'.'.$k};
+         my $fmg_device_adom = $fmg_device_adom_table{$oid_fmg_device_adom_table.'.'.$k};
+         my $fmg_device_con_state = $fmg_device_con_state_table{$oid_fmg_device_con_state_table.'.'.$k};
+         my $fmg_device_config_state = $fmg_device_config_state_table{$oid_fmg_device_config_state_table.'.'.$k};
+         if ($fmg_device_con_state eq '2') {
+            push (@fmg_device_down, ($fmg_device_name.'/'.$fmg_device_adom));
+         }
+         if ($fmg_device_config_state eq '2') {
+            push (@fmg_device_config, ($fmg_device_name.'/'.$fmg_device_adom));
+         }
+         $k++;
+      }
+      if (@fmg_device_config) {
+         $return_state = 'WARNING';
+         $return_string_errors .= sprintf(" Config Out-Of-Sync[%s]", join(", ", @fmg_device_config));
+      }
+      if (@fmg_device_down ) {
+         $return_string_errors .= sprintf(" DOWN[%s]", join(", ", @fmg_device_down));
+         $return_state = 'CRITICAL';
+      }
+      # Write an output string...
+      $return_string = $return_state . ": " . $curr_device . "  ";
+      $return_string .=  $return_string_errors;
+
+   } else {
+      $return_string = "UNKNOWN: device has no connected devices available";
+      $return_state = "UNKNOWN";
+   }
+
+   return ($return_state, $return_string);
+} # end get_fmg_device_state
 
 sub close_snmp_session{
   my $session = $_[0];
@@ -1260,7 +1320,7 @@ as an alternative to --authpassword/--privpassword/--community
 =over
 
 =item B<-T|--type>
-STRING - CPU, MEM, Ses, VPN, net, disk, ha, hasync, uptime, Cluster, wtp, hw, fazcpu, fazmem, fazdisk, sdwan-hc, license, license-version
+STRING - CPU, MEM, Ses, VPN, net, disk, ha, hasync, uptime, Cluster, wtp, hw, fazcpu, fazmem, fazdisk, sdwan-hc, fmgdevice, license, license-version
 
 =item B<-S|--serial>
 STRING - Primary serial number.
@@ -1269,7 +1329,8 @@ STRING - Primary serial number.
 BOOL - Get values of slave
 
 =item B<-w|--warning>
-INTEGER - Warning threshold, applies to cpu, mem, disk, net, session, license.
+INTEGER - Warning threshold, applies to cpu, mem, disk, net, session, uptime, license.
+
 
 =item B<-c|--critical>
 INTEGER - Critical threshold, applies to cpu, mem, disk, net, session, license.
